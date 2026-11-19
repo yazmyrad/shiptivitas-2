@@ -118,16 +118,34 @@ app.put('/api/v1/clients/:id', (req, res) => {
   const id = parseInt(req.params.id , 10);
   const { valid, messageObj } = validateId(id);
   if (!valid) {
-    res.status(400).send(messageObj);
+    return res.status(400).send(messageObj);
   }
 
   let { status, priority } = req.body;
+
+  if (priority !== undefined){
+    const { valid, messageObj  } = validatePriority(priority)
+
+    if (!valid) return res.status(400).send(messageObj)
+  }
+
   let clients = db.prepare('select * from clients').all();
   const client = clients.find(client => client.id === id);
 
-  /* ---------- Update code below ----------*/
+  if (status !== undefined && !['backlog','in-progress','complete'].includes(status)) {
+    return res.status(400).send({
+      'message': 'Invalid status provided.',
+      'long_message': 'Status can only be one of the following: [backlog | in-progress | complete].',
+    });
+  }
 
+  const targetStatus = status ?? client.status;
+  const targetPriority = priority ?? client.priority;
 
+  db.prepare(
+    'update clients set priority = priority + 1 where status = ? and priority >= ? and id != ?'
+  ).run(targetStatus, targetPriority, id);
+  db.prepare('update clients set priority = ?, status = ? where id = ?').run(targetPriority, targetStatus, id);
 
   return res.status(200).send(clients);
 });
